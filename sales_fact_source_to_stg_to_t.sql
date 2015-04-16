@@ -1,4 +1,40 @@
-﻿TRUNCATE TABLE sales_fact;
+﻿TRUNCATE TABLE staging.sales_fact_stg;
+ 
+COPY staging.sales_fact_stg 
+	   (client_order_id, client_id, supplier_order_id, item_id, supplier_id, order_source, 
+       sales_manger, purchase_manager, legal_entity, warehouse, incoterms, 
+       item_order_date, client_payment_terms, supplier_payment_terms, 
+       advance_invoice_send_date, advance_invoice_paid_date, invoice_send_date, 
+       invoice_paid_date, blank1, blank2, blank3, blank4, blank5, blank6, 
+       item_dispatch_plan_date, blank7, blank8, item_dispatch_fact_date, 
+       manufacturer, item_count, item_unit_of_measure, item_price, currency, 
+       supplier_item_price, supplier_currency, blank9, blank10, blank11, 
+       blank12)
+FROM '/home/kscherbach/sales_fact.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+
+TRUNCATE TABLE staging.item_dmn_stg;
+
+COPY staging.item_dmn_stg 
+	   (item_id, item_addition_date, item_name, item_group, item_unit_of_measure)
+FROM '/home/kscherbach/items.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+
+TRUNCATE TABLE staging.supplier_dmn_stg;
+
+COPY staging.supplier_dmn_stg 
+	   (supplier_id, supplier_addition_date, supplier_name, supplier_country, 
+       supplier_industry)
+FROM '/home/kscherbach/suppliers.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+
+TRUNCATE TABLE staging.customer_dmn_stg;
+
+COPY staging.customer_dmn_stg 
+	   (customer_id, customer_addition_date, customer_name, customer_country,
+       customer_industry)
+FROM '/home/kscherbach/clients.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+
+
+TRUNCATE TABLE public.sales_fact;
+DROP INDEX IF EXISTS sales_fact_client_order_id_index;
 
 INSERT INTO sales_fact 
 (SELECT trim(both ' ' from client_order_id) as client_order_id, 
@@ -25,25 +61,7 @@ INSERT INTO sales_fact
        trim(both ' ' from client_id) as client_id
        FROM staging.sales_fact_stg);
 
-TRUNCATE TABLE staging.item_dmn_stg;
-
-COPY staging.item_dmn_stg 
-	   (item_id, item_addition_date, item_name, item_group, item_unit_of_measure)
-FROM '/home/kscherbach/items.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
-
-TRUNCATE TABLE staging.supplier_dmn_stg;
-
-COPY staging.supplier_dmn_stg 
-	   (supplier_id, supplier_addition_date, supplier_name, supplier_country, 
-       supplier_industry)
-FROM '/home/kscherbach/suppliers.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
-
-TRUNCATE TABLE staging.customer_dmn_stg;
-
-COPY staging.customer_dmn_stg 
-	   (customer_id, customer_addition_date, customer_name, customer_country,
-       customer_industry)
-FROM '/home/kscherbach/clients.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+CREATE INDEX sales_fact_client_order_id_index ON sales_fact(client_order_id);
 
 TRUNCATE TABLE public.supplier_dmn;
 DROP INDEX IF EXISTS supplier_index;
@@ -76,3 +94,40 @@ INSERT INTO public.item_dmn
 );
 
 CREATE UNIQUE INDEX item_index ON item_dmn (item_id);
+
+/*DROP TABLE sales_item_pairing;
+
+CREATE TABLE sales_item_pairing 
+	(client_order_id text,
+	initial_item_id text,
+	item_order_date date,
+	item_count numeric(24,13),
+	item_price numeric(24,13),
+	currency text,
+	invoice_send_date date,
+	order_lines_count numeric(24,13),
+	order_items_count numeric(24,13),
+	order_items_price numeric(24,13),
+	complementary_item_id text); */
+
+TRUNCATE TABLE sales_item_pairing;
+
+INSERT INTO sales_item_pairing
+	(SELECT 
+	sales_fact_initial.client_order_id, 
+	sales_fact_initial.item_id AS initial_item_id,
+	sales_fact_initial.item_order_date,
+	sales_fact_initial.item_count,
+	sales_fact_initial.item_price,
+	sales_fact_initial.currency,
+	sales_fact_initial.invoice_send_date,
+	COUNT(sales_fact_initial.item_id) OVER (PARTITION BY sales_fact_initial.client_order_id) as order_lines_count,
+	SUM(sales_fact_initial.item_count) OVER (PARTITION BY sales_fact_initial.client_order_id) as order_items_count,
+	SUM(sales_fact_initial.item_price) OVER (PARTITION BY sales_fact_initial.client_order_id) as order_items_price,
+	sales_fact_complementary.item_id AS complementary_item_id
+FROM 
+	sales_fact AS sales_fact_initial
+	INNER JOIN
+	sales_fact AS sales_fact_complementary
+		ON  sales_fact_initial.client_order_id=sales_fact_complementary.client_order_id
+);
