@@ -131,3 +131,16 @@ FROM
 	sales_fact AS sales_fact_complementary
 		ON  sales_fact_initial.client_order_id=sales_fact_complementary.client_order_id
 );
+
+create table staging.xrte_daily ( xrte_date date,
+  currency_code text,
+  xrte_value numeric(24,13));
+
+  ALTER TABLE xrte_daily
+  OWNER TO afk_user;
+
+COPY staging.xrte_daily 
+	   (xrte_date, currency_code, xrte_value)
+FROM '/home/kscherbach/usd2015.txt' WITH CSV HEADER DELIMITER '	' NULL 'NULL';
+
+
