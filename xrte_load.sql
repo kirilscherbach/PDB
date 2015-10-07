@@ -62,3 +62,7 @@ AND date_part('day', b2.xrte_date)=21
 INNER JOIN ma_xrte b3 on date_part('year', b1.xrte_date)=b3.xrte_year
 AND date_part('month', b1.xrte_date)=b3.xrte_month
 order by 1;
+
+select x1.xrte_date, x1.xrte_value, b3.min_xrte_value, b3.avg_xrte_value, x2.xrte_value as payday_xrte from ym_xrte x1 
+inner join ma_xrte b3 on x1.xrte_year=b3.xrte_year AND x1.xrte_month=b3.xrte_month
+inner join ym_xrte x2 on x1.xrte_year=x2.xrte_year AND x1.xrte_month=x2.xrte_month and x2.xrte_day=7
